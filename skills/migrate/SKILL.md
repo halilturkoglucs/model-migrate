@@ -15,8 +15,9 @@ Run from the project root:
 
 ```sh
 model-migrate scan . --json
-model-migrate status . --within 90
 ```
+
+Then call this plugin's `status` MCP tool. If it is unavailable, run `model-migrate status . --within 90`.
 
 Report the status table. `no-date` means no shutdown was found, not that the model is safe. If a source fails, say so and do not treat its models as safe.
 
@@ -38,7 +39,7 @@ If the user wants a cheaper option, list the alternatives that have no near shut
 
 Build a config from the project's real instructions and representative synthetic inputs. Do not use real customer data unless the user explicitly approves it.
 
-`compare` makes paid calls and sends every case to the providers named. State the call count and providers, and get the user's approval before passing `--yes`.
+Comparison uses this plugin's `compare` MCP tool. It makes paid calls and sends every case to the providers named. Call it first without `confirm_paid_calls` to get the planned call count, state that count and the providers, and get the user's approval before calling it with `confirm_paid_calls: true`. If a key is missing, ask the user to run `/plugin configure model-migrate@model-migrate`; never ask them to paste a key into the chat.
 
 ```json
 {
@@ -56,10 +57,6 @@ Build a config from the project's real instructions and representative synthetic
 ```
 
 The first model is the baseline. Prices are USD per 1M tokens from the pricing page. Use the project's real output limit and schema, and omit `schema` and `scorePath` when they do not apply. Include weak, typical and strong inputs, because drift can appear at only one end.
-
-```sh
-model-migrate compare compare.json --yes
-```
 
 `compare` covers text generation only. Anthropic and Gemini support is experimental, so tell the user and check any provider error against current docs. For audio, embeddings or images, write a small round-trip test instead. For example, generate speech and transcribe it back, then compare the words to the source text.
 

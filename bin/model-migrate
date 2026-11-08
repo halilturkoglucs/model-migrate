@@ -1,23 +1,18 @@
 #!/usr/bin/env node
-import { readFile } from "node:fs/promises"
 import path from "node:path"
-import { plannedCalls, runComparison, validateConfig } from "../lib/compare.mjs"
-import { loadLifecycle, modelStatus } from "../lib/lifecycle.mjs"
+import { buildStatus, kindCounts } from "../lib/report.mjs"
 import { scanDirectory, uniqueModels } from "../lib/scan.mjs"
 
 const HELP = `model-migrate <command>
 
-  scan [dir] [--json]                     Find AI model IDs in a codebase
+  scan [dir] [--json]    Find AI model IDs in a codebase
   status [dir] [--json] [--within DAYS] [--fail]
-                                          Check live shutdown dates (default 90 days)
-                                          --fail exits 1 for retired, urgent or not-found
-                                          models used outside tests and docs
-  compare <config.json> [--json] [--yes]  Run models on the same prompts; --yes is required
-                                          because it makes paid API calls
+                         Check public shutdown dates (default 90 days)
+                         --fail exits 1 for retired or urgent models used
+                         outside tests and docs, or if a source cannot be read
+
+This CLI uses no API keys. Paid model comparison runs through the plugin's MCP tools.
 `
-const ACTIVE_KINDS = new Set(["runtime", "script", "config"])
-const FAILING_STATES = new Set(["retired", "urgent", "not-found"])
-const STATE_ORDER = ["retired", "urgent", "not-found", "unknown", "earliest-soon", "scheduled", "earliest-later", "no-date"]
 
 const args = process.argv.slice(2)
 const command = args[0]
@@ -30,15 +25,9 @@ function firstPositional() {
   return args.slice(1).find((arg, index, list) => !arg.startsWith("--") && list[index - 1] !== "--within")
 }
 const print = text => process.stdout.write(`${text}\n`)
-const fixed = (value, digits = 2) => (value === null || value === undefined ? "-" : value.toFixed(digits))
 function table(headers, rows) {
   const line = cells => `| ${cells.join(" | ")} |`
   return [line(headers), line(headers.map(() => "---")), ...rows.map(row => line(row.map(cell => String(cell))))].join("\n")
-}
-function kindCounts(usages) {
-  const counts = {}
-  for (const usage of usages) counts[usage.kind] = (counts[usage.kind] || 0) + 1
-  return Object.entries(counts).map(([kind, count]) => `${kind} ${count}`).join(", ")
 }
 
 async function scan() {
@@ -59,62 +48,18 @@ async function scan() {
 }
 
 async function status() {
-  const root = path.resolve(firstPositional() || ".")
-  const withinDays = Number(option("--within") ?? 90)
-  if (!Number.isFinite(withinDays)) throw new Error("--within needs a number of days")
-  const today = new Date().toISOString().slice(0, 10)
-  const { usages } = await scanDirectory(root)
-  const models = uniqueModels(usages)
-  const lifecycle = await loadLifecycle(new Set(models.map(item => item.provider)))
-  const rows = models.map(item => {
-    const result = modelStatus(item, lifecycle, { today, withinDays })
-    return { ...result, usedIn: kindCounts(item.usages), active: item.usages.some(usage => ACTIVE_KINDS.has(usage.kind)) }
-  }).sort((left, right) => STATE_ORDER.indexOf(left.state) - STATE_ORDER.indexOf(right.state) || left.model.localeCompare(right.model))
-  const errors = Object.values(lifecycle).flatMap(source => source.errors)
-  const failing = rows.filter(row => row.active && FAILING_STATES.has(row.state))
-  if (flag("--json")) print(JSON.stringify({ today, withinDays, models: rows, sourceErrors: errors }, null, 2))
+  const report = await buildStatus(path.resolve(firstPositional() || "."), { withinDays: Number(option("--within") ?? 90) })
+  if (flag("--json")) print(JSON.stringify(report, null, 2))
   else {
-    print(table(["State", "Model", "Date", "Listed replacement", "Used in", "Basis"], rows.map(row =>
+    print(table(["State", "Model", "Date", "Listed replacement", "Used in", "Basis"], report.models.map(row =>
       [row.state, row.model, row.date ? `${row.approximate ? "not before " : ""}${row.date}` : "-", row.replacement ?? "-", row.usedIn, row.basis])))
     print("\nno-date means no shutdown was found. It does not guarantee the model is safe.")
-    for (const error of errors) print(`SOURCE ERROR: ${error}`)
+    for (const error of report.sourceErrors) print(`SOURCE ERROR: ${error}`)
   }
-  if (flag("--fail") && (failing.length || errors.length)) process.exitCode = 1
+  if (flag("--fail") && (report.failing.length || report.sourceErrors.length)) process.exitCode = 1
 }
 
-async function compare() {
-  const configPath = firstPositional()
-  if (!configPath) throw new Error("compare needs a config file")
-  const config = JSON.parse(await readFile(configPath, "utf8"))
-  const problems = validateConfig(config)
-  if (problems.length) throw new Error(`invalid config:\n- ${problems.join("\n- ")}`)
-  if (!flag("--yes")) {
-    print(`This would make ${plannedCalls(config)} paid API calls and send every case to ${[...new Set(config.models.map(model => model.provider))].join(", ")}.`)
-    print("Run again with --yes to proceed.")
-    process.exitCode = 2
-    return
-  }
-  const report = await runComparison(config)
-  if (flag("--json")) return print(JSON.stringify(report, null, 2))
-  print(table(["Verdict", "Model", "Role", "$ per 1000", "Cost change", "Avg in/out/reasoning", "Avg ms", "Mean score", "Mean delta", "Max |delta|", "Errors", "Truncated", "Bad JSON"],
-    report.models.map(model => [
-      model.verdict, model.id, model.role, fixed(model.costPer1000, 4),
-      model.costChangePercent === null ? "-" : `${model.costChangePercent >= 0 ? "+" : ""}${model.costChangePercent.toFixed(0)}%`,
-      `${fixed(model.avgInputTokens, 0)}/${fixed(model.avgOutputTokens, 0)}/${fixed(model.avgReasoningTokens, 0)}`,
-      fixed(model.avgLatencyMs, 0), fixed(model.meanScore, 1), fixed(model.meanDelta, 1), fixed(model.maxAbsDelta, 1),
-      model.errors, model.truncated, model.invalidJson,
-    ])))
-  const scored = report.models.some(model => model.meanScore !== null)
-  if (scored) {
-    print("\nScore by case")
-    print(table(["Case", ...report.models.map(model => model.id)], report.models[0].perCase.map((item, index) =>
-      [item.case, ...report.models.map(model => fixed(model.perCase[index].score, 1))])))
-  }
-  for (const model of report.models) if (model.firstError) print(`\n${model.id} first error: ${model.firstError}`)
-  print(`\nREVIEW means a case moved more than ${report.tolerance} points from the baseline.`)
-}
-
-const commands = { scan, status, compare }
+const commands = { scan, status }
 if (!commands[command]) {
   print(HELP)
   process.exitCode = command && !["help", "--help", "-h"].includes(command) ? 2 : 0

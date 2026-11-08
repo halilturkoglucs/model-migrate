@@ -1,4 +1,9 @@
 import assert from "node:assert/strict"
+import { spawn } from "node:child_process"
+import { mkdtemp, writeFile } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import path from "node:path"
+import { fileURLToPath } from "node:url"
 import { test } from "node:test"
 import { ADAPTERS, costUsd, runComparison, validateConfig } from "../lib/compare.mjs"
 import { classifyState, loadLifecycle, lookupEntry, modelStatus, parseDate, parseDeprecations } from "../lib/lifecycle.mjs"
@@ -160,5 +165,51 @@ test("truncated output and missing keys fail", async () => {
   const report = await runComparison(config, { env: { OPENAI_API_KEY: "test" }, fetchImpl: fakeOpenAi({}, { new: { status: "incomplete" } }), baseUrls: { openai: "http://fake" } })
   assert.equal(report.models[1].verdict, "FAIL")
   assert.equal(report.models[1].truncated, 1)
-  assert.match(report.models[2].firstError, /GEMINI_API_KEY/)
+  assert.match(report.models[2].firstError, /no gemini API key/)
+})
+
+function rpc(env, messages) {
+  const server = fileURLToPath(new URL("../mcp/server.mjs", import.meta.url))
+  const child = spawn(process.execPath, [server], { env: { PATH: process.env.PATH, ...env } })
+  const expected = messages.filter(message => message.id !== undefined).length
+  return new Promise((resolve, reject) => {
+    let output = ""
+    child.stdout.on("data", chunk => {
+      output += chunk
+      if (output.split("\n").filter(Boolean).length === expected) {
+        child.kill()
+        resolve(output.trim().split("\n").map(line => JSON.parse(line)))
+      }
+    })
+    child.on("error", reject)
+    for (const message of messages) child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", ...message })}\n`)
+  })
+}
+
+test("MCP server lists tools and will not make calls without confirmation", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "model-migrate-"))
+  const models = ["a", "b"].map(id => ({ id, provider: "openai", price: { input: 1, output: 1 } }))
+  await writeFile(path.join(dir, "c.json"), JSON.stringify({ models, cases: [{ input: "x" }], runs: 2 }))
+  const [init, list, plan] = await rpc({ CLAUDE_PROJECT_DIR: dir, OPENAI_API_KEY: "ambient" }, [
+    { id: 1, method: "initialize", params: { protocolVersion: "2025-06-18" } },
+    { method: "notifications/initialized" },
+    { id: 2, method: "tools/list" },
+    { id: 3, method: "tools/call", params: { name: "compare", arguments: { config_path: "c.json" } } },
+  ])
+  assert.equal(init.result.protocolVersion, "2025-06-18")
+  assert.deepEqual(list.result.tools.map(tool => tool.name), ["status", "compare"])
+  const body = JSON.parse(plan.result.content[0].text)
+  assert.equal(body.executed, false)
+  assert.equal(body.plannedCalls, 4)
+})
+
+test("MCP compare ignores keys already in the environment and unexpanded placeholders", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "model-migrate-"))
+  const models = ["a", "b"].map(id => ({ id, provider: "openai", price: { input: 1, output: 1 } }))
+  await writeFile(path.join(dir, "c.json"), JSON.stringify({ models, cases: [{ input: "x" }], runs: 1 }))
+  const [result] = await rpc({ CLAUDE_PROJECT_DIR: dir, OPENAI_API_KEY: "ambient", MODEL_MIGRATE_OPENAI_KEY: "${user_config.openai_api_key}" }, [
+    { id: 1, method: "tools/call", params: { name: "compare", arguments: { config_path: "c.json", confirm_paid_calls: true } } },
+  ])
+  const body = JSON.parse(result.result.content[0].text)
+  assert.match(body.models[0].firstError, /no openai API key/)
 })

@@ -29,20 +29,35 @@ In Claude Code:
 /model-migrate:migrate
 ```
 
-Or run the CLI directly, which is on the Bash tool's PATH while the plugin is enabled:
+Example prompts:
+
+1. "Which AI models in this repo are shutting down in the next 90 days?"
+2. "Compare gpt-5.4-nano with its replacement on our grading prompts and show cost and score drift."
+3. "Our Claude model is being retired. Migrate this project, but show me what changes before you edit anything."
+
+The plugin also adds a CLI, on the Bash tool's PATH while the plugin is enabled. It uses no API keys:
 
 ```sh
 model-migrate scan .
 model-migrate status . --within 90
 model-migrate status . --fail
-model-migrate compare compare.json --yes
 ```
+
+Model comparison runs through the plugin's `compare` MCP tool.
 
 `status --fail` exits 1 when a retired, urgent or missing model is used outside tests and docs, so it can run in CI. It also exits 1 when a provider's data cannot be read.
 
 `no-date` means no shutdown was found. It does not guarantee a model is safe.
 
-Set `OPENAI_API_KEY` to use OpenAI's `shutdown_date` field and detect models your key cannot see. Other sources need no key.
+## API keys
+
+Scanning and public shutdown dates need no key. Keys are optional and only needed for comparisons, or to read OpenAI's `shutdown_date` field and detect models your key cannot see. Set them with:
+
+```
+/plugin configure model-migrate@model-migrate
+```
+
+Claude Code stores them in your system's secure credential store. The plugin does not read keys already set in your environment.
 
 ## Compare config
 
@@ -68,10 +83,12 @@ Verdicts: `FAIL` means errors, truncation or invalid JSON. `REVIEW` means a case
 ## Privacy and limits
 
 - `scan` works locally. For `.env` files it reports only the variable name, never the value.
-- `status` fetches public provider pages and sends your key only to OpenAI's models endpoint.
-- `compare` sends your test cases to the providers you list and makes paid calls. It does nothing without `--yes`.
+- Shutdown checks fetch public provider pages. If you configure an OpenAI key, it goes only to OpenAI's models endpoint.
+- `compare` sends your test cases to the providers you list and makes paid calls. It only reports the planned calls until confirmed.
 - `compare` covers text generation only.
 - The scan finds model IDs written literally. It cannot see values set only in your deployment settings or assembled at runtime.
 - `compare` is tested live against OpenAI. Anthropic and Gemini `compare` support is experimental: it has only run against mocked responses.
+
+See [PRIVACY.md](PRIVACY.md) for what is sent where.
 
 MIT licensed.
