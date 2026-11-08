@@ -8,7 +8,7 @@ import { plannedCalls, runComparison, validateConfig } from "../lib/compare.mjs"
 import { buildStatus } from "../lib/report.mjs"
 
 const PROTOCOL_VERSION = "2025-06-18"
-const VERSION = "0.2.0"
+const VERSION = "0.2.1"
 
 // Unset options can arrive empty or as an unexpanded placeholder.
 function configuredKey(value) {
@@ -18,9 +18,9 @@ function configuredKey(value) {
 // Only the plugin's own variables are read, never credentials already in the user's environment.
 function pluginKeys() {
   return {
-    OPENAI_API_KEY: configuredKey(process.env.MODEL_MIGRATE_OPENAI_KEY),
-    ANTHROPIC_API_KEY: configuredKey(process.env.MODEL_MIGRATE_ANTHROPIC_KEY),
-    GEMINI_API_KEY: configuredKey(process.env.MODEL_MIGRATE_GEMINI_KEY),
+    openai: configuredKey(process.env.CLAUDE_PLUGIN_OPTION_OPENAI_API_KEY),
+    anthropic: configuredKey(process.env.CLAUDE_PLUGIN_OPTION_ANTHROPIC_API_KEY),
+    gemini: configuredKey(process.env.CLAUDE_PLUGIN_OPTION_GEMINI_API_KEY),
   }
 }
 

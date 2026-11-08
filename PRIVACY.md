@@ -4,7 +4,7 @@ Model Migrate has no server of its own. The author does not receive, collect or 
 
 What the plugin does on your machine:
 
-- **Scanning** reads source files in the directory you choose and keeps the results local. For `.env` files it reports only the variable name, never the value.
+- **Scanning** reads source files in the directory you choose and keeps the results local. Real `.env` files are skipped. Committed templates such as `.env.example` are read, and only the variable name is reported.
 - **API keys** are optional and are entered through Claude Code's plugin settings, which keep them in your system's secure credential store. The plugin does not read credentials already set in your environment.
 
 What leaves your machine:

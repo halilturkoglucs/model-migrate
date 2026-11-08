@@ -145,7 +145,7 @@ test("comparison reports cost change and score drift", async () => {
     schema: { type: "object" },
     scorePath: "score",
   }
-  const report = await runComparison(config, { env: { OPENAI_API_KEY: "test" }, fetchImpl: fakeOpenAi({ old: 80, new: 90 }), baseUrls: { openai: "http://fake" } })
+  const report = await runComparison(config, { env: { openai: "test" }, fetchImpl: fakeOpenAi({ old: 80, new: 90 }), baseUrls: { openai: "http://fake" } })
   assert.equal(report.models[0].verdict, "OK")
   assert.equal(report.models[1].verdict, "REVIEW")
   assert.equal(report.models[1].meanDelta, 10)
@@ -162,7 +162,7 @@ test("truncated output and missing keys fail", async () => {
     cases: [{ input: "x" }],
     runs: 1,
   }
-  const report = await runComparison(config, { env: { OPENAI_API_KEY: "test" }, fetchImpl: fakeOpenAi({}, { new: { status: "incomplete" } }), baseUrls: { openai: "http://fake" } })
+  const report = await runComparison(config, { env: { openai: "test" }, fetchImpl: fakeOpenAi({}, { new: { status: "incomplete" } }), baseUrls: { openai: "http://fake" } })
   assert.equal(report.models[1].verdict, "FAIL")
   assert.equal(report.models[1].truncated, 1)
   assert.match(report.models[2].firstError, /no gemini API key/)
@@ -207,7 +207,7 @@ test("MCP compare ignores keys already in the environment and unexpanded placeho
   const dir = await mkdtemp(path.join(tmpdir(), "model-migrate-"))
   const models = ["a", "b"].map(id => ({ id, provider: "openai", price: { input: 1, output: 1 } }))
   await writeFile(path.join(dir, "c.json"), JSON.stringify({ models, cases: [{ input: "x" }], runs: 1 }))
-  const [result] = await rpc({ CLAUDE_PROJECT_DIR: dir, OPENAI_API_KEY: "ambient", MODEL_MIGRATE_OPENAI_KEY: "${user_config.openai_api_key}" }, [
+  const [result] = await rpc({ CLAUDE_PROJECT_DIR: dir, OPENAI_API_KEY: "ambient", CLAUDE_PLUGIN_OPTION_OPENAI_API_KEY: "${user_config.openai_api_key}" }, [
     { id: 1, method: "tools/call", params: { name: "compare", arguments: { config_path: "c.json", confirm_paid_calls: true } } },
   ])
   const body = JSON.parse(result.result.content[0].text)

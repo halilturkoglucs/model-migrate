@@ -1,7 +1,7 @@
 {
   "name": "model-migrate",
   "displayName": "Model Migrate",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Find AI model IDs in your code, check live shutdown dates, compare cost and output on your own prompts, then migrate safely.",
   "author": {
     "name": "halilturkoglucs",
@@ -40,5 +40,6 @@
       "sensitive": true,
       "required": false
     }
-  }
+  },
+  "icon": ".claude-plugin/icon.png"
 }

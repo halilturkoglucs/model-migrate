@@ -82,7 +82,7 @@ Verdicts: `FAIL` means errors, truncation or invalid JSON. `REVIEW` means a case
 
 ## Privacy and limits
 
-- `scan` works locally. For `.env` files it reports only the variable name, never the value.
+- `scan` works locally. Real `.env` files are skipped; only committed templates such as `.env.example` are read, and only the variable name is reported.
 - Shutdown checks fetch public provider pages. If you configure an OpenAI key, it goes only to OpenAI's models endpoint.
 - `compare` sends your test cases to the providers you list and makes paid calls. It only reports the planned calls until confirmed.
 - `compare` covers text generation only.
