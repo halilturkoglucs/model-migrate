@@ -1,0 +1,9 @@
+{
+  "name": "model-migrate",
+  "displayName": "Model Migrate",
+  "version": "0.1.0",
+  "description": "Find AI model IDs in your code, check live shutdown dates, compare cost and output on your own prompts, then migrate safely.",
+  "author": { "name": "halilturkoglucs", "url": "https://github.com/halilturkoglucs" },
+  "license": "MIT",
+  "keywords": ["llm", "openai", "anthropic", "gemini", "deprecation", "migration"]
+}

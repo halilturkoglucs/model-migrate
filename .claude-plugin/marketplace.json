@@ -1,0 +1,12 @@
+{
+  "name": "model-migrate",
+  "owner": { "name": "halilturkoglucs" },
+  "description": "Tools for migrating AI models safely.",
+  "plugins": [
+    {
+      "name": "model-migrate",
+      "source": "./",
+      "description": "Find AI model IDs in your code, check live shutdown dates, compare cost and output on your own prompts, then migrate safely."
+    }
+  ]
+}
