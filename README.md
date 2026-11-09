@@ -15,7 +15,7 @@ Model Migrate is a Claude Code plugin that:
 ## Install
 
 ```sh
-claude plugin marketplace add halilturkoglucs/model-migrate
+claude plugin marketplace add halilturkoglucs/model-migrate#full
 claude plugin install model-migrate@model-migrate
 ```
 
