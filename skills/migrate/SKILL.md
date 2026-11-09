@@ -7,25 +7,51 @@ description: Find AI model IDs in a codebase, check live shutdown dates, compare
 
 Replacing a model ID is the easy part. A listed replacement can use a different endpoint, reject parameters, spend output tokens on reasoning, cost more, or change the output your product depends on. Check those before editing anything.
 
-Provider data goes stale fast. Never rely on remembered model names, dates or prices. Use `model-migrate` output and pages read in this session.
+Provider data goes stale fast. Never rely on remembered model names, dates or prices. Use only pages read in this session.
 
 ## 1. Inventory
 
-Run from the project root:
+Search the project for model IDs, from the project root:
 
 ```sh
-model-migrate scan . --json
+grep -rnEI --exclude-dir={.git,node_modules,.next,.vercel,dist,build,coverage,vendor} --exclude='.env' --exclude='.env.*' --exclude='*lock*' 'gpt-[0-9]|gpt-(image|audio|realtime|transcribe|live)|chatgpt-|text-embedding-|whisper-1|tts-1|dall-e-|omni-moderation-|claude-[a-z0-9-]*[0-9]|gemini-[0-9]' .
 ```
 
-Then call this plugin's `status` MCP tool. If it is unavailable, run `model-migrate status . --within 90`.
+Also search for the short OpenAI names in quotes: `"o1`, `"o3`, `"o4`, and the same with single quotes and backticks.
 
-Report the status table. `no-date` means no shutdown was found, not that the model is safe. If a source fails, say so and do not treat its models as safe.
+Never open real `.env` files, because they hold secrets. Committed templates such as `.env.example` are fine.
 
-Check which model production really uses. Tagged `env-override` lines may be overridden in deployment settings, which the scan cannot see. Ask the user if you cannot check. Never print secret values.
+Sort each hit into one of these:
 
-## 2. Check the replacement really fits
+- **runtime**: application code that calls a model. These must migrate.
+- **script**: generation or maintenance scripts.
+- **test, doc or generated**: update them last.
+- **env-override**: the model is read from an environment variable, and the ID is only a default.
+- **cost branch**: price tables or conditions keyed on model names.
+- **feature branch**: conditions that enable parameters per model.
 
-For each model to migrate, read the provider's current model, pricing and endpoint pages. Check, for each file in the scan's API surface:
+For each file with a hit, note the endpoint it calls (for example Responses, Chat Completions, Messages, generateContent, audio, realtime, embeddings) and the parameters it sends.
+
+The search finds IDs written literally. It cannot see values set only in deployment settings or assembled at runtime. Ask the user which model production really uses if you cannot check. Never print secret values.
+
+## 2. Check shutdown dates
+
+Read each provider's current page:
+
+- OpenAI: https://developers.openai.com/api/docs/deprecations.md
+- Anthropic: https://platform.claude.com/docs/en/about-claude/model-deprecations.md
+- Gemini: https://ai.google.dev/gemini-api/docs/deprecations.md.txt
+
+Report one row per model: model, provider, where it is used, shutdown date, listed replacement, state.
+
+- A code alias may appear on the page only as dated snapshots. Match the alias to its newest snapshot and say you did so.
+- Gemini dates are the earliest possible shutdown, so report them as "not before".
+- If a model is not on the page, its state is "no date found". That does not mean it is safe.
+- If a page cannot be read, say so and do not treat that provider's models as safe.
+
+## 3. Check the replacement really fits
+
+For each model to migrate, read the provider's current model, pricing and endpoint pages. Check, for each file from step 1:
 
 - Does the replacement support this endpoint? A listed replacement may need a different API.
 - Are the parameters in use still accepted (`temperature`, `max_tokens`, `reasoning`, schema options)?
@@ -35,46 +61,35 @@ For each model to migrate, read the provider's current model, pricing and endpoi
 
 If the user wants a cheaper option, list the alternatives that have no near shutdown, with prices from the pricing page.
 
-## 3. Compare on the project's own prompts
+## 4. Compare on the project's own prompts
 
-Build a config from the project's real instructions and representative synthetic inputs. Do not use real customer data unless the user explicitly approves it.
+Before changing a default, test the candidate against the current model:
 
-Comparison uses this plugin's `compare` MCP tool. It makes paid calls and sends every case to the providers named. Call it first without `confirm_paid_calls` to get the planned call count, state that count and the providers, and get the user's approval before calling it with `confirm_paid_calls: true`. If a key is missing, ask the user to run `/plugin configure model-migrate@model-migrate`; never ask them to paste a key into the chat.
+1. Use the project's real instructions, output limit and schema.
+2. Use synthetic inputs. Do not use real customer data unless the user explicitly approves it.
+3. Include weak, typical and strong inputs, because drift can appear at only one end.
+4. Run each case at least twice on each model.
+5. Record cost, latency, truncation, invalid JSON and score drift against the current model.
 
-```json
-{
-  "models": [
-    { "id": "CURRENT_MODEL", "provider": "openai", "price": { "input": 0, "cachedInput": 0, "output": 0 } },
-    { "id": "CANDIDATE_MODEL", "provider": "openai", "params": {}, "price": { "input": 0, "output": 0 } }
-  ],
-  "cases": [{ "name": "strong answer", "instructions": "SYSTEM PROMPT", "input": "USER INPUT" }],
-  "runs": 2,
-  "maxOutputTokens": 700,
-  "schema": { "type": "object", "additionalProperties": false, "required": ["score"], "properties": { "score": { "type": "integer" } } },
-  "scorePath": "score",
-  "scoreTolerance": 5
-}
-```
+Comparison makes paid calls and sends every case to the provider. State the number of calls and the providers, and get the user's approval first. Use the project's existing test setup, or write a small script for the user to run in their own terminal. Never ask the user to paste a key into the chat.
 
-The first model is the baseline. Prices are USD per 1M tokens from the pricing page. Use the project's real output limit and schema, and omit `schema` and `scorePath` when they do not apply. Include weak, typical and strong inputs, because drift can appear at only one end.
+For audio, embeddings or images, use a round-trip test. For example, generate speech and transcribe it back, then compare the words to the source text.
 
-`compare` covers text generation only. Anthropic and Gemini support is experimental, so tell the user and check any provider error against current docs. For audio, embeddings or images, write a small round-trip test instead. For example, generate speech and transcribe it back, then compare the words to the source text.
+Show the user a table and explain anything that failed or moved. Small samples give weak evidence, so say how many cases ran. Let the user choose the model.
 
-Show the user the table and explain any `FAIL` or `REVIEW`. Small samples give weak evidence, so say how many cases ran. Let the user choose the model.
-
-## 4. Apply after approval
+## 5. Apply after approval
 
 Change only what the user approved:
 
 - Update default model IDs, env examples and hard-coded references.
-- Update every `cost-branch` line. Cost code keyed on model names often returns 0 for an unlisted model, which hides spend.
-- Update other `branch` lines that enable features per model.
-- Adjust parameters and output limits found in step 2.
+- Update every cost branch. Cost code keyed on model names often returns 0 for an unlisted model, which hides spend.
+- Update feature branches.
+- Adjust parameters and output limits found in step 3.
 - If the endpoint changes, rewrite that call and test it end to end.
-- If production overrides a model through env, tell the user which setting to change.
+- If production overrides a model through an environment variable, tell the user which setting to change.
 
-## 5. Verify and report
+## 6. Verify and report
 
-Run the project's type checks, tests and build. Run `model-migrate status .` again.
+Run the project's type checks, tests and build. Repeat the search from step 1 to confirm no old ID remains.
 
 Do not commit, push or deploy unless the user asks. Report what changed, test results, cost change and output drift, and anything not tested.

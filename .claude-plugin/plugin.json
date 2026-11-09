@@ -1,7 +1,7 @@
 {
   "name": "model-migrate",
   "displayName": "Model Migrate",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Find AI model IDs in your code, check live shutdown dates, compare cost and output on your own prompts, then migrate safely.",
   "author": {
     "name": "halilturkoglucs",
@@ -17,29 +17,8 @@
     "migration"
   ],
   "homepage": "https://github.com/halilturkoglucs/model-migrate",
+  "documentationUrl": "https://github.com/halilturkoglucs/model-migrate#readme",
+  "supportUrl": "https://github.com/halilturkoglucs/model-migrate/issues",
   "privacyPolicyUrl": "https://github.com/halilturkoglucs/model-migrate/blob/main/PRIVACY.md",
-  "userConfig": {
-    "openai_api_key": {
-      "type": "string",
-      "title": "OpenAI API key",
-      "description": "Optional. Lets the plugin read the OpenAI models API and run paid OpenAI comparisons you confirm.",
-      "sensitive": true,
-      "required": false
-    },
-    "anthropic_api_key": {
-      "type": "string",
-      "title": "Anthropic API key",
-      "description": "Optional. Used only for paid Anthropic comparisons you confirm. Experimental.",
-      "sensitive": true,
-      "required": false
-    },
-    "gemini_api_key": {
-      "type": "string",
-      "title": "Gemini API key",
-      "description": "Optional. Used only for paid Gemini comparisons you confirm. Experimental.",
-      "sensitive": true,
-      "required": false
-    }
-  },
   "icon": ".claude-plugin/icon.png"
 }
